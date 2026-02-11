@@ -1,1 +1,1 @@
-worker: .venv/bin/python main.py
+worker: python main.py
