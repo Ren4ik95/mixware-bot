@@ -81,6 +81,20 @@ class SubscriptionRepo:
         await self.session.refresh(sub)
         return sub
 
+    async def deactivate_all(self, user_id: int) -> int:
+        """Деактивирует все активные подписки пользователя. Возвращает количество."""
+        result = await self.session.execute(
+            select(Subscription).where(
+                Subscription.user_id == user_id,
+                Subscription.is_active == True,
+            )
+        )
+        subs = list(result.scalars().all())
+        for sub in subs:
+            sub.is_active = False
+        await self.session.commit()
+        return len(subs)
+
 
 class PaymentRepo:
     def __init__(self, session: AsyncSession):

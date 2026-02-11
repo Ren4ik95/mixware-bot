@@ -7,6 +7,7 @@ from typing import List
 def admin_menu_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.row(InlineKeyboardButton(text="🎁 Выдать подписку", callback_data="admin_grant_sub"))
+    builder.row(InlineKeyboardButton(text="🗑 Удалить подписку", callback_data="admin_revoke_sub"))
     builder.row(InlineKeyboardButton(text="📢 Gate-каналы (подписка)", callback_data="admin_gate_channels"))
     builder.row(InlineKeyboardButton(text="🎮 Мод-каналы (скачать мод)", callback_data="admin_mod_channels"))
     builder.row(InlineKeyboardButton(text="📨 Массовая рассылка", callback_data="admin_broadcast"))

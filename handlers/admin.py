@@ -29,6 +29,7 @@ def get_tariff(tariff_id: str):
 
 class AdminState(StatesGroup):
     grant_waiting_user_id = State()
+    revoke_waiting_user_id = State()
 
     add_gate_username = State()
     add_gate_title = State()
@@ -151,6 +152,90 @@ async def handle_grant_user_id(
                 f"🎁 <b>Вам выдана подписка!</b>\n\n"
                 f"📅 Тариф: <b>{tariff.label}</b>\n"
                 f"📆 До: <b>{expires_text}</b>"
+            )
+        )
+    except Exception:
+        pass
+
+
+# ─── Удаление подписки ────────────────────────────────────────────────────────
+
+@router.callback_query(lambda c: c.data == "admin_revoke_sub")
+async def handle_revoke_sub(callback: CallbackQuery, state: FSMContext) -> None:
+    if not is_admin(callback.from_user.id):
+        return
+    await state.set_state(AdminState.revoke_waiting_user_id)
+    await callback.answer()
+    await callback.message.edit_text(
+        "🗑 <b>Удаление подписки</b>\n\n"
+        "Введите <b>Telegram ID</b> пользователя у которого нужно удалить подписку:\n"
+        "<i>Узнать ID можно у @userinfobot</i>"
+    )
+
+
+@router.message(AdminState.revoke_waiting_user_id)
+async def handle_revoke_user_id(
+    message: Message,
+    state: FSMContext,
+    user_repo: UserRepo,
+    sub_repo: SubscriptionRepo
+) -> None:
+    if not is_admin(message.from_user.id):
+        return
+    if not message.text or not message.text.strip().isdigit():
+        await message.answer("⚠️ Введите корректный Telegram ID (только цифры).")
+        return
+
+    target_id = int(message.text.strip())
+    target_user = await user_repo.get_by_telegram_id(target_id)
+
+    if not target_user:
+        await message.answer(
+            f"❌ Пользователь <code>{target_id}</code> не найден."
+        )
+        await state.clear()
+        return
+
+    count = await sub_repo.deactivate_all(target_user.id)
+    await state.clear()
+
+    if count == 0:
+        await message.answer(
+            f"ℹ️ У пользователя <code>{target_id}</code> нет активных подписок.",
+            reply_markup=admin_menu_keyboard()
+        )
+        return
+
+    await message.answer(
+        f"✅ <b>Подписка удалена!</b>\n\n"
+        f"👤 Пользователь: <code>{target_id}</code>\n"
+        f"❌ Деактивировано подписок: <b>{count}</b>",
+        reply_markup=admin_menu_keyboard()
+    )
+
+    # Кикаем из приватных мод-каналов
+    from core.bot import bot
+    from db.engine import AsyncSessionFactory
+    from services.channel import kick_user_from_channel, is_user_in_channel
+
+    async with AsyncSessionFactory() as session:
+        mod_repo = ModChannelRepo(session)
+        private_channels = await mod_repo.get_private_channels()
+
+    for ch in private_channels:
+        if not ch.channel_id:
+            continue
+        in_channel = await is_user_in_channel(bot, target_id, ch.channel_id)
+        if in_channel:
+            await kick_user_from_channel(bot, target_id, ch.channel_id)
+
+    try:
+        await bot.send_message(
+            chat_id=target_id,
+            text=(
+                "❌ <b>Ваша подписка была отменена администратором.</b>\n\n"
+                "Доступ к закрытым каналам закрыт.\n"
+                "По вопросам обратитесь к администратору."
             )
         )
     except Exception:
